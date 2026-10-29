@@ -4,6 +4,52 @@
 #include <curand_kernel.h>
 #include <cuda_runtime.h>
 
+__device__ bool hit_aabb(const ray& r, const GPUBvhNode& node, double max_t) {
+    double t_min = 0.001;
+    double t_max = max_t;
+    for (int axis = 0; axis < 3; ++axis) {
+        const double origin = r.origin()[axis];
+        const double direction = r.direction()[axis];
+        const double lo = node.bounds_min[axis];
+        const double hi = node.bounds_max[axis];
+        if (fabs(direction) < 1e-15) {
+            if (origin < lo || origin > hi) return false;
+            continue;
+        }
+        double t0 = (lo - origin) / direction;
+        double t1 = (hi - origin) / direction;
+        if (t0 > t1) { const double temp = t0; t0 = t1; t1 = temp; }
+        t_min = fmax(t_min, t0);
+        t_max = fmin(t_max, t1);
+        if (t_max < t_min) return false;
+    }
+    return true;
+}
+
+__device__ bool hit_triangle(const ray& r, const GPUTriangle& tri, double max_t,
+                             double& t, vec3& normal) {
+    const vec3 edge1 = tri.v1 - tri.v0;
+    const vec3 edge2 = tri.v2 - tri.v0;
+    const vec3 p = cross(r.direction(), edge2);
+    const double determinant = dot(edge1, p);
+    if (fabs(determinant) < 1e-12) return false;
+    const double inverse_determinant = 1.0 / determinant;
+    const vec3 from_vertex = r.origin() - tri.v0;
+    const double u = dot(from_vertex, p) * inverse_determinant;
+    if (u < 0.0 || u > 1.0) return false;
+    const vec3 q = cross(from_vertex, edge1);
+    const double v = dot(r.direction(), q) * inverse_determinant;
+    if (v < 0.0 || u + v > 1.0) return false;
+    const double candidate_t = dot(edge2, q) * inverse_determinant;
+    if (candidate_t <= 0.001 || candidate_t >= max_t) return false;
+    const vec3 unnormalized_normal = cross(edge1, edge2);
+    const double normal_length = unnormalized_normal.length();
+    if (normal_length < 1e-15) return false;
+    t = candidate_t;
+    normal = unnormalized_normal / normal_length;
+    return true;
+}
+
 __global__ void init_curand_kernel(curandState* states, unsigned long long seed, int num_threads) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < num_threads) {
@@ -14,6 +60,10 @@ __global__ void ray_tracing_kernel(
     float4* accumulation,
     const GPUSphere* spheres,
     int num_spheres,
+    const GPUTriangle* triangles,
+    const GPUBvhNode* bvh_nodes,
+    int num_bvh_nodes,
+    const int* triangle_indices,
     const material* materials,
     const CameraGPU* camera,
     curandState* rand_states,
@@ -85,7 +135,40 @@ __global__ void ray_tracing_kernel(
             rec.front_face = dot(r.direction(), outward_normal) < 0.0;
             rec.normal = rec.front_face ? outward_normal : -outward_normal;
             rec.mat = &materials[sphere.material_id];
+        }
 
+        if (num_bvh_nodes > 0) {
+            int stack[64];
+            int stack_size = 0;
+            stack[stack_size++] = 0;
+            while (stack_size > 0) {
+                const int node_index = stack[--stack_size];
+                const GPUBvhNode& node = bvh_nodes[node_index];
+                if (!hit_aabb(r, node, closest_t)) continue;
+
+                if (node.count > 0) {
+                    for (int j = 0; j < node.count; ++j) {
+                        const GPUTriangle& tri = triangles[triangle_indices[node.first + j]];
+                        double triangle_t;
+                        vec3 outward_normal;
+                        if (hit_triangle(r, tri, closest_t, triangle_t, outward_normal)) {
+                            closest_t = triangle_t;
+                            hit = true;
+                            rec.t = triangle_t;
+                            rec.p = r.at(triangle_t);
+                            rec.front_face = dot(r.direction(), outward_normal) < 0.0;
+                            rec.normal = rec.front_face ? outward_normal : -outward_normal;
+                            rec.mat = &materials[tri.material_id];
+                        }
+                    }
+                } else if (stack_size + 2 <= 64) {
+                    stack[stack_size++] = node.right;
+                    stack[stack_size++] = node.left;
+                }
+            }
+        }
+
+        if (hit) {
             color attenuation;
             ray scattered;
             if (scatter(*rec.mat, r, rec, attenuation, scattered, &local_state)) {

@@ -8,85 +8,117 @@
 #include "material_types.h"
 #include "cuda_kernels.cuh"
 #include "memory.cuh"
+#include "obj_mesh.h"
 
 #include <glfw3.h>
 #include <vector>
 #include <string>
 #include <iostream>
 #include <ctime>
+#include <exception>
 
-GPUSphere convert_sphere_to_gpu(const sphere* cpu_sphere) {
-    return GPUSphere{};
-}
-
-int main() {
-    
-    std::vector<GPUSphere> gpu_spheres;
-    std::vector<material> gpu_materials;
-    std::vector<int> sphere_to_mat_id;  
-    
-  
-    gpu_materials.push_back(material(color(0.5, 0.5, 0.5), material_type::lambertian));
-    auto ground_material_id = 0;
-  
-    gpu_spheres.push_back(GPUSphere{point3(0, -1000, 0), 1000.0, ground_material_id});
-
-    int mat_id = 1;
-    for (int a = -11; a < 11; a++) {
-        for (int b = -11; b < 11; b++) {
-            auto choose_mat = random_double();
-            point3 center(a + 0.9 * random_double(), 0.2, b + 0.9 * random_double());
-            
-            if ((center - point3(4, 0.2, 0)).length() > 0.9) {
-                int sphere_mat_id;
-                
-                if (choose_mat < 0.8) {
-                    auto albedo = color::random() * color::random();
-                    gpu_materials.push_back(material(albedo, material_type::lambertian));
-                    sphere_mat_id = mat_id++;
-                } else if (choose_mat < 0.95) {
-                    auto albedo = color::random(0.5, 1);
-                    auto fuzz = random_double(0, 0.5);
-                    material m(albedo, material_type::metal);
-                    m.fuzz = fuzz;
-                    gpu_materials.push_back(m);
-                    sphere_mat_id = mat_id++;
-                } else {
-                    gpu_materials.push_back(material(1.5));
-                    sphere_mat_id = mat_id++;
-                }
-                
-                gpu_spheres.push_back(GPUSphere{center, 0.2, sphere_mat_id});
-            }
+int main(int argc, char** argv) {
+    std::string model_path;
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "--model" && i + 1 < argc) {
+            model_path = argv[++i];
+        } else if (arg == "--help" || arg == "-h") {
+            std::cout << "Usage: CUDA Raytracer.exe [--model path/to/model.obj]\n"
+                         "Without --model, the procedural sphere scene is rendered.\n";
+            return 0;
+        } else {
+            std::cerr << "Unknown or incomplete option: " << arg << "\n"
+                      << "Usage: CUDA Raytracer.exe [--model path/to/model.obj]\n";
+            return 1;
         }
     }
     
-    gpu_materials.push_back(material(1.5));  // Glass
-    int glass_mat_id = mat_id++;
-    gpu_spheres.push_back(GPUSphere{point3(0, 1, 0), 1.0, glass_mat_id});
-    
-    gpu_materials.push_back(material(color(0.4, 0.2, 0.1), material_type::lambertian));  // Brown
-    int brown_mat_id = mat_id++;
-    gpu_spheres.push_back(GPUSphere{point3(-4, 1, 0), 1.0, brown_mat_id});
-    
-    gpu_materials.push_back(material(color(0.7, 0.6, 0.5), material_type::metal));  // Metal
-    int metal_mat_id = mat_id++;
-    gpu_materials[metal_mat_id].fuzz = 0.0;
-    gpu_spheres.push_back(GPUSphere{point3(4, 1, 0), 1.0, metal_mat_id});
-    
-    std::cout << "Loaded " << gpu_spheres.size() << " spheres and " << gpu_materials.size() << " materials.\n";
-    
+    std::vector<GPUSphere> gpu_spheres;
+    std::vector<material> gpu_materials;
+    ObjMesh mesh;
+
+    gpu_materials.push_back(material(color(0.5, 0.5, 0.5), material_type::lambertian));
+    auto ground_material_id = 0;
+    gpu_spheres.push_back(GPUSphere{point3(0, -1000, 0), 1000.0, ground_material_id});
+
     camera cam;
+    if (!model_path.empty()) {
+        try {
+            const int diffuse_id = static_cast<int>(gpu_materials.size());
+            gpu_materials.push_back(material(color(0.78, 0.24, 0.10), material_type::lambertian));
+
+            const int metal_id = static_cast<int>(gpu_materials.size());
+            material metal(color(0.72, 0.76, 0.82), material_type::metal);
+            metal.fuzz = 0.03;
+            gpu_materials.push_back(metal);
+
+            const int glass_id = static_cast<int>(gpu_materials.size());
+            gpu_materials.push_back(material(1.5));
+
+            mesh.load(model_path, { diffuse_id, metal_id, glass_id });
+        } catch (const std::exception& error) {
+            std::cerr << "Could not load model: " << error.what() << "\n";
+            return 1;
+        }
+        cam.lookfrom = point3(0, 4.0, 15.0);
+        cam.lookat = point3(0, 1.2, 0);
+        cam.vup = vec3(0, 1, 0);
+        cam.vfov = 36;
+        cam.focus_dist = 15.3;
+        cam.defocus_angle = 0.0;
+        std::cout << "Loaded OBJ " << model_path << " as three material variants ("
+                  << mesh.triangles.size() << " triangles total, " << mesh.nodes.size()
+                  << " BVH nodes).\n";
+    } else {
+        int mat_id = 1;
+        for (int a = -11; a < 11; a++) {
+            for (int b = -11; b < 11; b++) {
+                auto choose_mat = random_double();
+                point3 center(a + 0.9 * random_double(), 0.2, b + 0.9 * random_double());
+                if ((center - point3(4, 0.2, 0)).length() > 0.9) {
+                    int sphere_mat_id;
+                    if (choose_mat < 0.8) {
+                        gpu_materials.push_back(material(color::random() * color::random(), material_type::lambertian));
+                        sphere_mat_id = mat_id++;
+                    } else if (choose_mat < 0.95) {
+                        material m(color::random(0.5, 1), material_type::metal);
+                        m.fuzz = random_double(0, 0.5);
+                        gpu_materials.push_back(m);
+                        sphere_mat_id = mat_id++;
+                    } else {
+                        gpu_materials.push_back(material(1.5));
+                        sphere_mat_id = mat_id++;
+                    }
+                    gpu_spheres.push_back(GPUSphere{center, 0.2, sphere_mat_id});
+                }
+            }
+        }
+        gpu_materials.push_back(material(1.5));
+        const int glass_mat_id = mat_id++;
+        gpu_spheres.push_back(GPUSphere{point3(0, 1, 0), 1.0, glass_mat_id});
+        gpu_materials.push_back(material(color(0.4, 0.2, 0.1), material_type::lambertian));
+        const int brown_mat_id = mat_id++;
+        gpu_spheres.push_back(GPUSphere{point3(-4, 1, 0), 1.0, brown_mat_id});
+        gpu_materials.push_back(material(color(0.7, 0.6, 0.5), material_type::metal));
+        const int metal_mat_id = mat_id++;
+        gpu_materials[metal_mat_id].fuzz = 0.0;
+        gpu_spheres.push_back(GPUSphere{point3(4, 1, 0), 1.0, metal_mat_id});
+        std::cout << "Loaded " << gpu_spheres.size() << " spheres and " << gpu_materials.size() << " materials.\n";
+    }
+    
     cam.aspect_ratio = 16.0 / 9.0;
     cam.image_width = 540;
     cam.samples_per_pixel = 2;
     cam.max_depth = 5;
-    cam.vfov = 20;
-    cam.lookfrom = point3(13, 2, 3);
-    cam.lookat = point3(0, 0, 0);
-    cam.vup = vec3(0, 1, 0);
-    cam.defocus_angle = 0.6;
-    cam.focus_dist = 10.0;
+    cam.vfov = model_path.empty() ? 20 : 36;
+    if (model_path.empty()) {
+        cam.lookfrom = point3(13, 2, 3);
+        cam.lookat = point3(0, 0, 0);
+        cam.vup = vec3(0, 1, 0);
+        cam.defocus_angle = 0.6;
+        cam.focus_dist = 10.0;
+    }
    
     cam.prepare_progressive_render();
     
@@ -114,8 +146,10 @@ int main() {
                  0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
     
     GPUScene gpu_scene;
-    gpu_scene.allocate(cam.image_width, cam.rendered_image_height(), gpu_spheres.size());
-    gpu_scene.transfer_scene_data(gpu_spheres, gpu_materials);
+    gpu_scene.allocate(cam.image_width, cam.rendered_image_height(),
+                       static_cast<int>(gpu_spheres.size()), static_cast<int>(gpu_materials.size()),
+                       static_cast<int>(mesh.triangles.size()), static_cast<int>(mesh.nodes.size()));
+    gpu_scene.transfer_scene_data(gpu_spheres, gpu_materials, mesh.triangles, mesh.nodes, mesh.triangle_indices);
     
     CameraGPU gpu_cam;
     gpu_cam.lookfrom = cam.lookfrom;
@@ -146,6 +180,10 @@ int main() {
             gpu_scene.d_accumulation,
             gpu_scene.d_spheres,
             gpu_scene.num_spheres,
+            gpu_scene.d_triangles,
+            gpu_scene.d_bvh_nodes,
+            gpu_scene.num_bvh_nodes,
+            gpu_scene.d_triangle_indices,
             gpu_scene.d_materials,
             gpu_scene.d_camera,
             gpu_scene.d_rand_states,

@@ -79,6 +79,7 @@
     <ClInclude Include="material.cuh" />
     <ClInclude Include="material_types.h" />
     <ClInclude Include="memory.cuh" />
+    <ClInclude Include="obj_mesh.h" />
     <ClInclude Include="ray.h" />
     <ClInclude Include="vec3.h" />
   </ItemGroup>

@@ -14,6 +14,22 @@ struct GPUSphere {
     int material_id;
 };
 
+struct GPUTriangle {
+    point3 v0;
+    point3 v1;
+    point3 v2;
+    int material_id;
+};
+
+struct GPUBvhNode {
+    point3 bounds_min;
+    point3 bounds_max;
+    int left;
+    int right;
+    int first;
+    int count;
+};
+
 struct CameraGPU {
     point3 lookfrom;
     point3 pixel00_loc;
@@ -30,6 +46,10 @@ __global__ void ray_tracing_kernel(
     float4* accumulation,
     const GPUSphere* spheres,
     int num_spheres,
+    const GPUTriangle* triangles,
+    const GPUBvhNode* bvh_nodes,
+    int num_bvh_nodes,
+    const int* triangle_indices,
     const material* materials,
     const CameraGPU* camera,
     curandState* rand_states,
