@@ -22,6 +22,9 @@ https://github.com/user-attachments/assets/d2a1dfbd-4355-4ae9-9364-7da3f63dde2d
 * Reflection and refraction
 * Schlick's approximation for dielectric reflectance
 * CUDA device memory management
+* CPU-built median-split BVH, uploaded and traversed on the GPU
+* Three side-by-side model instances with diffuse, metal, and glass materials
+* Progressive sample accumulation across frames
 * GPU-based image generation
 * Tone mapping and gamma correction
 * OpenGL/GLFW-based display
@@ -34,12 +37,14 @@ Depending on the material, the ray can be scattered, reflected, or refracted. Th
 
 The resulting color is written to a GPU image buffer and processed for display before being presented through OpenGL.
 
+For OBJ scenes, the CPU loads vertex positions and faces, triangulates polygon faces, normalizes the model, and builds a BVH. The GPU traverses the BVH to find triangle intersections, alongside the ground sphere. Model mode displays three copies with diffuse, metal, and dielectric materials. The rendered image is tone-mapped on the GPU, copied back to the CPU, and displayed through OpenGL.
+
 ### Final Render (128 Samples)
 
-<img width="952" height="532" alt="image" src="https://github.com/user-attachments/assets/fb0a04d8-d0d3-4a85-b684-9627eac87df3" />
+<img width="956" height="525" alt="image" src="https://github.com/user-attachments/assets/f51904ec-6a86-44e3-953d-c6ce021655ef" />
 
-<img width="951" height="532" alt="Screenshot 2026-09-07 144714" src="https://github.com/user-attachments/assets/3b872b84-86f5-4e20-8552-2d99faead793" />
 
+<img width="957" height="535" alt="image" src="https://github.com/user-attachments/assets/aa16653a-e74e-4ae0-8274-5d645254bba7" />
 
 ---
 ## CPU vs GPU
@@ -204,11 +209,6 @@ Open `CUDA Raytracer.slnx` in Visual Studio, build the project, and run the appl
 
 ## Future Improvements
 
-* **Monte Carlo Sampling** — Introduce randomized multi-sample ray tracing to reduce noise and improve image quality.
-* **Progressive Rendering** — Accumulate samples across frames to progressively converge toward a cleaner image.
-* **BVH Acceleration** — Implement a Bounding Volume Hierarchy to significantly reduce ray-scene intersection costs.
-* **Triangle Meshes** — Extend the renderer beyond spheres to support arbitrary triangle-based geometry and 3D models.
-* **Importance Sampling** — Improve sampling efficiency by preferentially sampling directions that contribute more to the final image.
 * **CUDA Optimization** — Optimize memory access patterns, thread occupancy, and kernel execution.
 * **GPU Profiling** — Use NVIDIA Nsight tools to identify and optimize CPU/GPU bottlenecks.
 * **CUDA/OpenGL Interoperability** — Reduce CPU-GPU data transfers by directly sharing CUDA output buffers with OpenGL.
