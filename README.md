@@ -7,7 +7,8 @@ The project focuses on moving the computationally intensive ray-tracing workload
 ## Demo
 
 
-https://github.com/user-attachments/assets/236e4fd6-4260-4615-9df1-d5236d697f75
+https://github.com/user-attachments/assets/d2a1dfbd-4355-4ae9-9364-7da3f63dde2d
+
 
 ## Features
 
@@ -35,7 +36,7 @@ The resulting color is written to a GPU image buffer and processed for display b
 
 ### Final Render (128 Samples)
 
-<img width="953" height="537" alt="image" src="https://github.com/user-attachments/assets/c49c13c2-9370-4cf7-9713-a84a436e23f0" />
+<img width="952" height="532" alt="image" src="https://github.com/user-attachments/assets/fb0a04d8-d0d3-4a85-b684-9627eac87df3" />
 
 <img width="951" height="532" alt="Screenshot 2026-09-07 144714" src="https://github.com/user-attachments/assets/3b872b84-86f5-4e20-8552-2d99faead793" />
 
