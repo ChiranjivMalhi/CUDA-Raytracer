@@ -7,9 +7,7 @@ The project focuses on moving the computationally intensive ray-tracing workload
 ## Demo
 
 
-https://github.com/user-attachments/assets/c6bd675e-1982-4f74-848a-6cf2d2bcff2d
-
-
+https://github.com/user-attachments/assets/236e4fd6-4260-4615-9df1-d5236d697f75
 
 ## Features
 
@@ -55,7 +53,7 @@ The CUDA implementation parallelizes the rendering workload at the pixel level, 
 | -------------- | ---------------------: | ---------------------: |
 | Rendering Time |      **60 secs** |      **1secs** |
 |Samples         | **4**| **4**|
-| Resolution     | **960x540** | **[960x540** |
+| Resolution     | **960x540** | **960x540** |
 | Max Ray Depth  |            **5** |            **5** |
 | Speedup        |                 **1×** |         **60×** |
 
